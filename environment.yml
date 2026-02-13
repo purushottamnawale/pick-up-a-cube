@@ -1,0 +1,10 @@
+name: pick-up-cube
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - mujoco
+    - dm_control
+    - numpy
