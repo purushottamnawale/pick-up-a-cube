@@ -7,6 +7,7 @@ Uses dm_control for MuJoCo interface and inverse kinematics.
 import os
 import numpy as np
 import mujoco
+from dm_control import mujoco as dm_mujoco
 from dm_control.mujoco import Physics
 
 # Robot joint names (excluding gripper)
@@ -117,24 +118,49 @@ def compute_ik(physics, target_pos, target_quat=None):
     return np.array(joint_positions)
 
 
-def move_to_target(physics, target_positions, steps=500):
-    """Move robot joints to target positions by setting actuator targets."""
-    # Set joint drive targets (actuators 1-7 correspond to ctrl indices 0-6)
-    for i in range(len(ARM_JOINTS)):
-        physics.data.ctrl[i] = target_positions[i]
+def set_joint_targets(physics, target_positions):
+    """Set joint positions directly (simplified control)."""
+    for i, joint_name in enumerate(ARM_JOINTS):
+        joint_id = physics.model.joint(joint_name).id
+        qpos_addr = physics.model.jnt_qposadr[joint_id]
+        physics.data.qpos[qpos_addr] = target_positions[i]
     
-    # Step simulation to let PD controllers drive the joints
-    for _ in range(steps):
+    physics.forward()
+
+
+def move_to_target(physics, target_positions, steps=100):
+    """Move robot joints to target positions gradually."""
+    # Get current positions
+    current_positions = []
+    for joint_name in ARM_JOINTS:
+        joint_id = physics.model.joint(joint_name).id
+        qpos_addr = physics.model.jnt_qposadr[joint_id]
+        current_positions.append(physics.data.qpos[qpos_addr])
+    current_positions = np.array(current_positions)
+    
+    # Interpolate to target
+    for step in range(steps):
+        t = (step + 1) / steps
+        positions = current_positions + t * (target_positions - current_positions)
+        set_joint_targets(physics, positions)
+        
+        # Step simulation
         physics.step()
 
 
 def control_gripper(physics, close=True):
-    """Open or close the gripper using the gripper actuator."""
-    # actuator8 (ctrl index 7): 0 = closed, 255 = fully open
-    physics.data.ctrl[7] = 0 if close else 255
+    """Open or close the gripper."""
+    gripper_pos = 0.0 if close else 0.04  # 0 = closed, 0.04 = open
+    
+    for joint_name in GRIPPER_JOINTS:
+        joint_id = physics.model.joint(joint_name).id
+        qpos_addr = physics.model.jnt_qposadr[joint_id]
+        physics.data.qpos[qpos_addr] = gripper_pos
+    
+    physics.forward()
     
     # Step simulation to let gripper move
-    for _ in range(100):
+    for _ in range(50):
         physics.step()
 
 
@@ -187,11 +213,6 @@ def main():
     os.chdir(original_dir)
     
     print("Simulation loaded successfully")
-    
-    # Reset robot to home position
-    key_id = physics.model.key("home").id
-    mujoco.mj_resetDataKeyframe(physics.model.ptr, physics.data.ptr, key_id)
-    physics.forward()
     
     # Open gripper initially
     control_gripper(physics, close=False)
