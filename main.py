@@ -17,16 +17,21 @@ END_EFFECTOR_BODY = "hand"
 
 
 def randomize_cube_position(physics):
-    """Randomize cube position on the table."""
-    x = np.random.uniform(0.4, 0.5)
-    y = np.random.uniform(-0.05, 0.05)
-    z = 0.025  # On table surface
+    """Randomize cube position and orientation on the table."""
+    x = np.random.uniform(0.42, 0.48)
+    y = np.random.uniform(-0.04, 0.04)
+    z = 0.02  # On table surface
     
-    # Set cube pose
+    # Random yaw rotation (around Z-axis)
+    yaw = np.random.uniform(0, 2 * np.pi)
+    quat = [np.cos(yaw / 2), 0, 0, np.sin(yaw / 2)]  # [w, x, y, z]
+    
+    # Set cube pose (freejoint: x, y, z, qw, qx, qy, qz)
     cube_joint_id = physics.model.joint("cube_joint").id
     qpos_addr = physics.model.jnt_qposadr[cube_joint_id]
     
     physics.data.qpos[qpos_addr:qpos_addr+3] = [x, y, z]
+    physics.data.qpos[qpos_addr+3:qpos_addr+7] = quat
     physics.forward()
     
     return np.array([x, y, z])
@@ -57,7 +62,6 @@ def compute_ik(physics, target_pos):
     max_iterations = 300
     
     # Target orientation: gripper pointing down (-Z world)
-    # The hand's local Z axis should align with world -Z
     target_z = np.array([0, 0, -1])
     
     # Create temporary data for IK computation
@@ -184,9 +188,9 @@ def main():
         <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
         
         <!-- Cube to pick up -->
-        <body name="cube" pos="0.5 0 0.025">
+        <body name="cube" pos="0.5 0 0.02">
           <freejoint name="cube_joint"/>
-          <geom name="cube_geom" type="box" size="0.025 0.025 0.025" rgba="1 0 0 1" mass="0.1" friction="1 0.5 0.5"/>
+          <geom name="cube_geom" type="box" size="0.02 0.02 0.02" rgba="1 0 0 1" mass="0.1" friction="1 0.5 0.5"/>
         </body>
       </worldbody>
     </mujoco>
@@ -204,7 +208,7 @@ def main():
         physics.step()
     print("Robot at home position, gripper open")
     
-    # Randomize cube position
+    # Randomize cube position and orientation
     cube_pos = randomize_cube_position(physics)
     print(f"Cube position: {cube_pos}")
     
@@ -215,12 +219,16 @@ def main():
     approach_joints = compute_ik(physics, approach_pos)
     move_to_position(physics, approach_joints)
     
-    # Lower to grasp position (hand at ~0.115m puts fingertips properly around cube)
+    # Lower to grasp position (hand at ~0.11m puts fingertips properly around cube)
     grasp_pos = cube_pos.copy()
-    grasp_pos[2] = 0.115
+    grasp_pos[2] = 0.11
     print("Lowering to grasp position...")
     grasp_joints = compute_ik(physics, grasp_pos)
     move_to_position(physics, grasp_joints)
+    
+    # Settle before grasping
+    for _ in range(100):
+        physics.step()
     
     # Close gripper
     print("Closing gripper...")
