@@ -11,7 +11,6 @@ from dm_control.mujoco import Physics
 
 # Joint names
 ARM_JOINTS = ["joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7"]
-GRIPPER_JOINTS = ["finger_joint1", "finger_joint2"]
 
 # End effector body name
 END_EFFECTOR_BODY = "hand"
@@ -209,16 +208,15 @@ def main():
     print(f"Cube position: {cube_pos}")
     
     # Move to approach position (above cube)
-    # Hand body is ~0.1m above fingertips, so position hand higher
     approach_pos = cube_pos.copy()
-    approach_pos[2] = 0.25
+    approach_pos[2] = 0.2
     print("Moving to approach position...")
     approach_joints = compute_ik(physics, approach_pos)
     move_to_position(physics, approach_joints)
     
-    # Lower to grasp position (hand at ~0.13m puts fingertips around cube at 0.025m)
+    # Lower to grasp position (hand at ~0.125m puts fingertips around cube)
     grasp_pos = cube_pos.copy()
-    grasp_pos[2] = 0.13
+    grasp_pos[2] = 0.125
     print("Lowering to grasp position...")
     grasp_joints = compute_ik(physics, grasp_pos)
     move_to_position(physics, grasp_joints)
