@@ -17,21 +17,16 @@ END_EFFECTOR_BODY = "hand"
 
 
 def randomize_cube_position(physics):
-    """Randomize cube position and orientation on the table."""
-    x = np.random.uniform(0.45, 0.55)
-    y = np.random.uniform(-0.1, 0.1)
+    """Randomize cube position on the table."""
+    x = np.random.uniform(0.4, 0.5)
+    y = np.random.uniform(-0.05, 0.05)
     z = 0.025  # On table surface
-    
-    # Random rotation around z-axis
-    angle = np.random.uniform(0, 2 * np.pi)
-    quat = [np.cos(angle/2), 0, 0, np.sin(angle/2)]
     
     # Set cube pose
     cube_joint_id = physics.model.joint("cube_joint").id
     qpos_addr = physics.model.jnt_qposadr[cube_joint_id]
     
     physics.data.qpos[qpos_addr:qpos_addr+3] = [x, y, z]
-    physics.data.qpos[qpos_addr+3:qpos_addr+7] = quat
     physics.forward()
     
     return np.array([x, y, z])
@@ -57,9 +52,9 @@ def compute_ik(physics, target_pos):
     qpos = physics.data.qpos.copy()
     
     # IK parameters
-    step_size = 0.3
-    tolerance = 0.01
-    max_iterations = 200
+    step_size = 0.4
+    tolerance = 0.005
+    max_iterations = 300
     
     # Target orientation: gripper pointing down (-Z world)
     # The hand's local Z axis should align with world -Z
@@ -122,18 +117,24 @@ def get_current_joint_positions(physics):
     return np.array(positions)
 
 
-def move_to_position(physics, target_joints, steps=200):
+def move_to_position(physics, target_joints, steps=250, gripper_open=True):
     """Move robot to target joint positions using actuator control."""
     current = get_current_joint_positions(physics)
+    gripper_val = 255 if gripper_open else 0
     
     for step in range(steps):
         t = (step + 1) / steps
         interpolated = current + t * (target_joints - current)
         
-        # Set control for arm joints (actuators 0-6)
+        # Set control for arm joints (actuators 0-6) and maintain gripper
         ctrl = physics.data.ctrl.copy()
         ctrl[:7] = interpolated
+        ctrl[7] = gripper_val
         physics.set_control(ctrl)
+        physics.step()
+    
+    # Settle at target
+    for _ in range(50):
         physics.step()
 
 
@@ -185,7 +186,7 @@ def main():
         <!-- Cube to pick up -->
         <body name="cube" pos="0.5 0 0.025">
           <freejoint name="cube_joint"/>
-          <geom name="cube_geom" type="box" size="0.025 0.025 0.025" rgba="1 0 0 1" mass="0.1"/>
+          <geom name="cube_geom" type="box" size="0.025 0.025 0.025" rgba="1 0 0 1" mass="0.1" friction="1 0.5 0.5"/>
         </body>
       </worldbody>
     </mujoco>
@@ -214,23 +215,23 @@ def main():
     approach_joints = compute_ik(physics, approach_pos)
     move_to_position(physics, approach_joints)
     
-    # Lower to grasp position (hand at ~0.125m puts fingertips around cube)
+    # Lower to grasp position (hand at ~0.115m puts fingertips properly around cube)
     grasp_pos = cube_pos.copy()
-    grasp_pos[2] = 0.125
+    grasp_pos[2] = 0.115
     print("Lowering to grasp position...")
     grasp_joints = compute_ik(physics, grasp_pos)
     move_to_position(physics, grasp_joints)
     
     # Close gripper
     print("Closing gripper...")
-    control_gripper(physics, close=True, steps=100)
+    control_gripper(physics, close=True, steps=200)
     
     # Lift cube
     lift_pos = grasp_pos.copy()
     lift_pos[2] = 0.3
     print("Lifting cube...")
     lift_joints = compute_ik(physics, lift_pos)
-    move_to_position(physics, lift_joints)
+    move_to_position(physics, lift_joints, gripper_open=False)
     
     # Check result
     final_cube_pos = get_cube_position(physics)
