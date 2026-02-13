@@ -65,6 +65,9 @@ def compute_ik(physics, target_pos, target_quat=None):
     # Get end effector body id
     body_id = physics.model.body(END_EFFECTOR_BODY).id
     
+    # Save original joint positions to restore later
+    original_qpos = physics.data.qpos.copy()
+    
     # IK parameters
     step_size = 0.5
     tolerance = 0.01
@@ -101,12 +104,16 @@ def compute_ik(physics, target_pos, target_quat=None):
         
         physics.forward()
     
-    # Return computed joint positions
+    # Get computed joint positions
     joint_positions = []
     for joint_name in ARM_JOINTS:
         joint_id = physics.model.joint(joint_name).id
         qpos_addr = physics.model.jnt_qposadr[joint_id]
         joint_positions.append(physics.data.qpos[qpos_addr])
+    
+    # Restore original positions so move_to_target can interpolate properly
+    physics.data.qpos[:] = original_qpos
+    physics.forward()
     
     return np.array(joint_positions)
 
