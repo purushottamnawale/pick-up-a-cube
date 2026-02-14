@@ -18,8 +18,8 @@ END_EFFECTOR_BODY = "hand"
 
 def randomize_cube_position(physics):
     """Randomize cube position and orientation on the table."""
-    x = np.random.uniform(0.42, 0.48)
-    y = np.random.uniform(-0.04, 0.04)
+    x = np.random.uniform(0.43, 0.47)
+    y = np.random.uniform(-0.03, 0.03)
     z = 0.02  # On table surface
     
     # Random yaw rotation (around Z-axis)
@@ -143,15 +143,15 @@ def move_to_position(physics, target_joints, steps=250, gripper_open=True):
 
 
 def control_gripper(physics, close=True, steps=50):
-    """Open or close the gripper."""
-    # Actuator 8 (index 7): 0 = closed, 255 = open
+    """Open or close the gripper while maintaining arm position."""
     target = 0 if close else 255
     
+    # Maintain current arm control while adjusting gripper
     ctrl = physics.data.ctrl.copy()
     ctrl[7] = target
-    physics.set_control(ctrl)
     
     for _ in range(steps):
+        physics.set_control(ctrl)
         physics.step()
 
 
