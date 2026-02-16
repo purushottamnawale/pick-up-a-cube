@@ -1,0 +1,3 @@
+mujoco
+dm_control
+numpy
