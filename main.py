@@ -7,6 +7,7 @@ Uses dm_control for MuJoCo interface and inverse kinematics.
 import os
 import numpy as np
 import mujoco
+import mujoco.viewer
 from dm_control.mujoco import Physics
 
 # Joint names
@@ -121,7 +122,7 @@ def get_current_joint_positions(physics):
     return np.array(positions)
 
 
-def move_to_position(physics, target_joints, steps=250, gripper_open=True):
+def move_to_position(physics, target_joints, steps=250, gripper_open=True, viewer=None):
     """Move robot to target joint positions using actuator control."""
     current = get_current_joint_positions(physics)
     gripper_val = 255 if gripper_open else 0
@@ -136,13 +137,17 @@ def move_to_position(physics, target_joints, steps=250, gripper_open=True):
         ctrl[7] = gripper_val
         physics.set_control(ctrl)
         physics.step()
+        if viewer:
+            viewer.sync()
     
     # Settle at target
     for _ in range(50):
         physics.step()
+        if viewer:
+            viewer.sync()
 
 
-def control_gripper(physics, close=True, steps=50):
+def control_gripper(physics, close=True, steps=50, viewer=None):
     """Open or close the gripper while maintaining arm position."""
     target = 0 if close else 255
     
@@ -153,6 +158,8 @@ def control_gripper(physics, close=True, steps=50):
     for _ in range(steps):
         physics.set_control(ctrl)
         physics.step()
+        if viewer:
+            viewer.sync()
 
 
 def main():
@@ -201,15 +208,20 @@ def main():
     
     print("Simulation loaded successfully")
     
+    # Launch the viewer
+    viewer = mujoco.viewer.launch_passive(physics.model.ptr, physics.data.ptr)
+    
     # Initialize to home position and open gripper
     home_ctrl = np.array([0, 0, 0, -1.57079, 0, 1.57079, -0.7853, 255])
     physics.set_control(home_ctrl)
     for _ in range(100):
         physics.step()
+        viewer.sync()
     print("Robot at home position, gripper open")
     
     # Randomize cube position and orientation
     cube_pos = randomize_cube_position(physics)
+    viewer.sync()
     print(f"Cube position: {cube_pos}")
     
     # Move to approach position (above cube)
@@ -217,29 +229,30 @@ def main():
     approach_pos[2] = 0.2
     print("Moving to approach position...")
     approach_joints = compute_ik(physics, approach_pos)
-    move_to_position(physics, approach_joints)
+    move_to_position(physics, approach_joints, viewer=viewer)
     
     # Lower to grasp position (hand at ~0.11m puts fingertips properly around cube)
     grasp_pos = cube_pos.copy()
     grasp_pos[2] = 0.11
     print("Lowering to grasp position...")
     grasp_joints = compute_ik(physics, grasp_pos)
-    move_to_position(physics, grasp_joints)
+    move_to_position(physics, grasp_joints, viewer=viewer)
     
     # Settle before grasping
     for _ in range(100):
         physics.step()
+        viewer.sync()
     
     # Close gripper
     print("Closing gripper...")
-    control_gripper(physics, close=True, steps=200)
+    control_gripper(physics, close=True, steps=200, viewer=viewer)
     
     # Lift cube
     lift_pos = grasp_pos.copy()
     lift_pos[2] = 0.3
     print("Lifting cube...")
     lift_joints = compute_ik(physics, lift_pos)
-    move_to_position(physics, lift_joints, gripper_open=False)
+    move_to_position(physics, lift_joints, gripper_open=False, viewer=viewer)
     
     # Check result
     final_cube_pos = get_cube_position(physics)
@@ -249,6 +262,11 @@ def main():
         print("Cube pickup attempt completed")
     
     print(f"Final cube position: {final_cube_pos}")
+    
+    # Keep viewer open until closed
+    print("Close the viewer window to exit...")
+    while viewer.is_running():
+        viewer.sync()
 
 
 if __name__ == "__main__":
