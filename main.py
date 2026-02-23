@@ -167,7 +167,7 @@ def compute_ik(physics, target_pos):
         
         """
         Update Joint Angles:
-        q_i+1 = q_i + d_q
+        q_i+1 = q_i + d_q_i
         
         source: L4_Rob1_English.pdf Page 7
         """
