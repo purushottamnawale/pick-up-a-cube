@@ -146,7 +146,7 @@ def compute_ik(physics, target_pos):
         lambda^2 = Damping factor (0.01 in the code)
         I        = 6x6 Identity matrix
         
-        source: L5_Rob1_English.pdf Page 8
+        source: L5_Rob1_English.pdf Page 8 like Moore-Penrose pseudoinverse
         """
         jac_pinv = jac_T @ np.linalg.inv(jac @ jac_T + damping * np.eye(6))
 
@@ -160,11 +160,17 @@ def compute_ik(physics, target_pos):
         alpha = Step size / scaling factor (0.4 in the code)
         
 
-        source: L5_Rob1_English.pdf Page 8
+        source: L4_Rob1_English.pdf Page 7
         """
         # This is how much to move each joint
         d_q = jac_pinv @ error * step_size
         
+        """
+        Update Joint Angles:
+        q_i+1 = q_i + d_q
+        
+        source: L4_Rob1_English.pdf Page 7
+        """
         # Apply the joint changes
         for i, dof_id in enumerate(dof_ids):
             data.qpos[dof_id] += d_q[i]
