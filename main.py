@@ -115,25 +115,59 @@ def compute_ik(physics, target_pos):
         
         # Compute the Jacobian - this tells us how joint velocities affect
         # end effector velocity (both linear and angular)
-        jacp = np.zeros((3, model.nv))  # position jacobian
-        jacr = np.zeros((3, model.nv))  # rotation jacobian
-        mujoco.mj_jacBody(model, data, jacp, jacr, body_id)
+
+        """
+        Geometric Jacobian Matrix:
+        J = [ J_t ]
+            [ J_r ]
+        Where:
+        J   = 6x7 Jacobian matrix
+        J_p = Translational component (3x7)
+        J_r = Rotational component (3x7)
+        """
+        jac_t = np.zeros((3, model.nv))  # position jacobian
+        jac_r = np.zeros((3, model.nv))  # rotation jacobian
+        mujoco.mj_jacBody(model, data, jac_t, jac_r, body_id)
         
         # We only care about our 7 arm joints, not any others
-        jac = np.vstack([jacp[:, dof_ids], jacr[:, dof_ids]])
+        jac = np.vstack([jac_t[:, dof_ids], jac_r[:, dof_ids]])
         
         # Damped least squares - adds stability when near singularities
         # (when the arm is stretched out or folded weird and the math gets sketchy)
         damping = 0.01
         jac_T = jac.T
-        jac_pinv = jac_T @ np.linalg.inv(jac @ jac_T + damping * np.eye(6))
+
+        """
+        Damped Least Squares (DLS) Pseudoinverse:
+        J_pinv_DLS = J^T * (J * J^T + (lambda^2) * I)^-1
         
+        Where:
+        J^T      = Transpose of the Jacobian
+        lambda^2 = Damping factor (0.01 in the code)
+        I        = 6x6 Identity matrix
+        
+        source: L5_Rob1_English.pdf Page 8
+        """
+        jac_pinv = jac_T @ np.linalg.inv(jac @ jac_T + damping * np.eye(6))
+
+
+        """
+        Joint Correction Computation:
+        d_q = J_pinv_DLS * dx_E * alpha
+        
+        Where:
+        d_q    = 7x1 vector of joint angle corrections
+        alpha = Step size / scaling factor (0.4 in the code)
+        
+
+        source: L5_Rob1_English.pdf Page 8
+        """
         # This is how much to move each joint
-        dq = jac_pinv @ error * step_size
+        d_q = jac_pinv @ error * step_size
         
         # Apply the joint changes
         for i, dof_id in enumerate(dof_ids):
-            data.qpos[dof_id] += dq[i]
+            data.qpos[dof_id] += d_q[i]
         
         # Update forward kinematics for next iteration
         mujoco.mj_forward(model, data)
