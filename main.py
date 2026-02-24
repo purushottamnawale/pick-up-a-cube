@@ -296,6 +296,11 @@ def main():
     
     print("Simulation loaded successfully")
     
+    # Put the cube somewhere random before opening the viewer
+    # so it's already in place when the scene first appears
+    cube_pos = randomize_cube_position(physics)
+    print(f"Cube position: {cube_pos}")
+    
     # Open a window so we can watch what's happening
     viewer = mujoco.viewer.launch_passive(physics.model.ptr, physics.data.ptr)
     
@@ -307,11 +312,6 @@ def main():
         physics.step()
         viewer.sync()
     print("Robot at home position, gripper open")
-    
-    # Put the cube somewhere random so it's not always in the same spot
-    cube_pos = randomize_cube_position(physics)
-    viewer.sync()
-    print(f"Cube position: {cube_pos}")
     
     # Step 1: Move to a position above the cube (approach from above)
     approach_pos = cube_pos.copy()
